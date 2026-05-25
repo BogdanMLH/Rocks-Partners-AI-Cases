@@ -1,0 +1,844 @@
+{
+  "name": "CRM/Retension",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -192
+      ],
+      "id": "ed1b4039-4938-49ca-9412-4c1410d86079",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "chatId": "@churnalert",
+        "text": "={{ $json.output[0].content[0].text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1232,
+        0
+      ],
+      "id": "0fc86048-b13d-4f54-b653-85fed48f789a",
+      "name": "Send a text message",
+      "webhookId": "1e61eebb-462a-4eba-95ca-870fc744adf9",
+      "credentials": {
+        "telegramApi": {
+          "id": "KcSDTIUbGmkAaqyP",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst totalHigh = items.length;\nconst totalLTV = items.reduce((sum, i) => sum + (parseFloat(i.json.lifetime_Value) || 0), 0);\nconst avgRisk = items.reduce((sum, i) => sum + (parseFloat(i.json.churn_risk) || 0), 0) / totalHigh;\nconst highestRisk = items.reduce((a, b) => parseFloat(a.json.churn_risk) > parseFloat(b.json.churn_risk) ? a : b);\nconst highestLTV = items.reduce((a, b) => parseFloat(a.json.lifetime_Value) > parseFloat(b.json.lifetime_Value) ? a : b);\n\nreturn [{\n  json: {\n    total_high_risk: totalHigh,\n    total_ltv_at_risk: totalLTV.toFixed(2),\n    average_risk_score: avgRisk.toFixed(2),\n    highest_risk_player: {\n      player_ID: highestRisk.json.player_ID,\n      churn_risk: parseFloat(highestRisk.json.churn_risk),\n      lifetime_Value: parseFloat(highestRisk.json.lifetime_Value)\n    },\n    highest_ltv_player: {\n      player_ID: highestLTV.json.player_ID,\n      churn_risk: parseFloat(highestLTV.json.churn_risk),\n      lifetime_Value: parseFloat(highestLTV.json.lifetime_Value)\n    },\n    scan_date: new Date().toLocaleDateString('en-GB')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        0
+      ],
+      "id": "0c469854-a228-4aae-bbfe-af94503a5a6a",
+      "name": "Players Summary Counting"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -144,
+        -384
+      ],
+      "id": "199c21c2-61ad-48a2-b313-36d13665e573",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const datasetItems = $('Casino DataSet').all();\n  const match = datasetItems.find(\n    d => d.json.player_ID === item.json.player_ID\n  );\n\n  return {\n    json: {\n      ...item.json,\n      gmail: match ? match.json.gmail : null\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        16
+      ],
+      "id": "962e0625-7940-46d4-8ba9-38750d4eb83d",
+      "name": "Adding gmails"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "74f11820-6de1-43c5-89b8-c2287c4d6b4d",
+              "leftValue": "={{ $json.churn_risk }}",
+              "rightValue": 0.35,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        176,
+        16
+      ],
+      "id": "98157343-62c8-479c-b111-d7ae4697022e",
+      "name": "HIGH/LOW risks"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a43253d4-ddfb-41bb-a082-2849eb83cae4",
+              "leftValue": "={{ $json.gmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        -192
+      ],
+      "id": "2f1039e2-1ced-4c53-a335-75ec5688ffed",
+      "name": "Has a mail"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    // Whale, long tenure — should be very LOW\n    json: {\n      player_ID: 201,\n      Average_Monthly_Deposit: 1500,\n      Months_Since_Registration: 72,\n      Lifetime_Value: 108000,\n      gmail: \"bohdanmalanchenko@gmail.com\"\n    }\n  },\n  {\n    // New high spender — short tenure makes it HIGH despite big deposits\n    json: {\n      player_ID: 202,\n      Average_Monthly_Deposit: 1200,\n      Months_Since_Registration: 2,\n      Lifetime_Value: 2400,\n      gmail: \"bohdanmalanchenko@gmail.com\"\n    }\n  },\n  {\n    // Classic churn profile — low deposit, barely registered\n    json: {\n      player_ID: 203,\n      Average_Monthly_Deposit: 20,\n      Months_Since_Registration: 1,\n      Lifetime_Value: 20\n    }\n  },\n  {\n    // Loyal small spender — low deposit but years of activity\n    json: {\n      player_ID: 204,\n      Average_Monthly_Deposit: 35,\n      Months_Since_Registration: 60,\n      Lifetime_Value: 2100\n    }\n  },\n  {\n    // Mid-tier player with healthy spend consistency\n    json: {\n      player_ID: 205,\n      Average_Monthly_Deposit: 250,\n      Months_Since_Registration: 24,\n      Lifetime_Value: 6000\n    }\n  },\n  {\n    // Declining spender — high lifetime but low current monthly vs total ratio\n    json: {\n      player_ID: 206,\n      Average_Monthly_Deposit: 50,\n      Months_Since_Registration: 48,\n      Lifetime_Value: 15000\n    }\n  },\n  {\n    // Rapid drop-off — was spending big, now almost nothing\n    json: {\n      player_ID: 207,\n      Average_Monthly_Deposit: 15,\n      Months_Since_Registration: 36,\n      Lifetime_Value: 9000\n    }\n  },\n  {\n    // Consistent mid spender, long tenure — should be LOW\n    json: {\n      player_ID: 208,\n      Average_Monthly_Deposit: 180,\n      Months_Since_Registration: 45,\n      Lifetime_Value: 8100\n    }\n  },\n  {\n    // Brand new, zero lifetime value — never deposited yet\n    json: {\n      player_ID: 209,\n      Average_Monthly_Deposit: 0,\n      Months_Since_Registration: 0,\n      Lifetime_Value: 0\n    }\n  },\n  {\n    // Short tenure but spend_per_month is perfectly consistent — borderline\n    json: {\n      player_ID: 210,\n      Average_Monthly_Deposit: 100,\n      Months_Since_Registration: 5,\n      Lifetime_Value: 500\n    }\n  },\n  {\n    // Very high monthly vs total ratio — newer player spending aggressively\n    json: {\n      player_ID: 211,\n      Average_Monthly_Deposit: 800,\n      Months_Since_Registration: 3,\n      Lifetime_Value: 2400\n    }\n  },\n  {\n    // Ghost player — registered long ago but almost no deposits\n    json: {\n      player_ID: 212,\n      Average_Monthly_Deposit: 10,\n      Months_Since_Registration: 50,\n      Lifetime_Value: 200\n    }\n  },\n  {\n    // Recovering player — low monthly but decent lifetime suggests recent drop\n    json: {\n      player_ID: 213,\n      Average_Monthly_Deposit: 40,\n      Months_Since_Registration: 30,\n      Lifetime_Value: 5500\n    }\n  },\n  {\n    // Perfect consistency — monthly * tenure = lifetime exactly\n    json: {\n      player_ID: 214,\n      Average_Monthly_Deposit: 200,\n      Months_Since_Registration: 30,\n      Lifetime_Value: 6000\n    }\n  },\n  {\n    // Mid spender, mid tenure — pure average player, tests model's middle ground\n    json: {\n      player_ID: 215,\n      Average_Monthly_Deposit: 120,\n      Months_Since_Registration: 18,\n      Lifetime_Value: 2160\n    }\n  },\n  {\n    // High deposit but suspiciously low lifetime — possible data issue\n    json: {\n      player_ID: 216,\n      Average_Monthly_Deposit: 900,\n      Months_Since_Registration: 24,\n      Lifetime_Value: 800\n    }\n  },\n  {\n    // Extreme whale — tests upper boundary of model confidence\n    json: {\n      player_ID: 217,\n      Average_Monthly_Deposit: 5000,\n      Months_Since_Registration: 60,\n      Lifetime_Value: 300000\n    }\n  },\n  {\n    // Long tenure, zero recent deposits — likely churned already\n    json: {\n      player_ID: 218,\n      Average_Monthly_Deposit: 0,\n      Months_Since_Registration: 55,\n      Lifetime_Value: 3200\n    }\n  },\n  {\n    // Borderline: medium everything, no strong signals either way\n    json: {\n      player_ID: 219,\n      Average_Monthly_Deposit: 90,\n      Months_Since_Registration: 12,\n      Lifetime_Value: 1080\n    }\n  },\n  {\n    // Negative Monthly_vs_Total edge — lifetime is 1 cent, stresses division guard\n    json: {\n      player_ID: 220,\n      Average_Monthly_Deposit: 500,\n      Months_Since_Registration: 1,\n      Lifetime_Value: 0.01\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -192
+      ],
+      "id": "72fe97de-416c-4045-bb77-bc4adedb71ba",
+      "name": "Casino DataSet"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1x7fB4XMGArzEKmeVQfvNHos0sb06aj_DrgVswp_tMoc",
+          "mode": "list",
+          "cachedResultName": "Churns",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1x7fB4XMGArzEKmeVQfvNHos0sb06aj_DrgVswp_tMoc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2101115345,
+          "mode": "list",
+          "cachedResultName": "Churns",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1x7fB4XMGArzEKmeVQfvNHos0sb06aj_DrgVswp_tMoc/edit#gid=2101115345"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "player_ID": "={{ $json.player_ID }}",
+            "churn_risk": "={{ $json.churn_risk }}",
+            "lifetime_Value": "={{ $json.lifetime_Value }}",
+            "threshold_used": "={{ $json.threshold_used }}",
+            "gmail": "={{ $json.gmail }}",
+            "adding_date": "={{ $today.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "player_ID"
+          ],
+          "schema": [
+            {
+              "id": "player_ID",
+              "displayName": "player_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "churn_risk",
+              "displayName": "churn_risk",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lifetime_Value",
+              "displayName": "lifetime_Value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threshold_used",
+              "displayName": "threshold_used",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "adding_date",
+              "displayName": "adding_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gmail",
+              "displayName": "gmail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Summary:",
+              "displayName": "Summary:",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        592,
+        0
+      ],
+      "id": "95c719fe-555a-4d2c-bdd3-57109c499ead",
+      "name": "Adding rows to Churns",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "S0js6birFI5LkUOY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1x7fB4XMGArzEKmeVQfvNHos0sb06aj_DrgVswp_tMoc",
+          "mode": "list",
+          "cachedResultName": "Churns",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1x7fB4XMGArzEKmeVQfvNHos0sb06aj_DrgVswp_tMoc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 589285624,
+          "mode": "list",
+          "cachedResultName": "Loyalists",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1x7fB4XMGArzEKmeVQfvNHos0sb06aj_DrgVswp_tMoc/edit#gid=589285624"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "adding_date": "={{ $today.format('yyyy-MM-dd') }}",
+            "player_ID": "={{ $('Format change for google sheets1').item.json.player_ID }}",
+            "churn_risk": "={{ $json.churn_risk }}",
+            "lifetime_Value": "={{ $json.lifetime_Value }}",
+            "threshold_used": "={{ $json.threshold_used }}",
+            "gmail": "={{ $json.gmail }}"
+          },
+          "matchingColumns": [
+            "player_ID"
+          ],
+          "schema": [
+            {
+              "id": "player_ID",
+              "displayName": "player_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "churn_risk",
+              "displayName": "churn_risk",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "lifetime_Value",
+              "displayName": "lifetime_Value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threshold_used",
+              "displayName": "threshold_used",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "adding_date",
+              "displayName": "adding_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gmail",
+              "displayName": "gmail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Summary:",
+              "displayName": "Summary:",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        592,
+        192
+      ],
+      "id": "a01e71e1-6a6c-4263-a540-8b0859fb3cde",
+      "name": "Adding rows to Loyalists",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "S0js6birFI5LkUOY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://prozac-keenly-mutual.ngrok-free.dev/predict",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "player_ID",
+              "value": "={{ $json.player_ID }}"
+            },
+            {
+              "name": "Average_Monthly_Deposit",
+              "value": "={{ $json.Average_Monthly_Deposit }}"
+            },
+            {
+              "name": "Months_Since_Registration",
+              "value": "={{ $json.Months_Since_Registration }}"
+            },
+            {
+              "name": "Lifetime_Value",
+              "value": "={{ $json.Lifetime_Value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -160,
+        16
+      ],
+      "id": "72e4ddbd-d7f7-4b82-a830-c5d4b6e031f7",
+      "name": "HTTP Request to ML | Calculating risks"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a senior retention analyst at a premium online casino. \nYou write sharp, executive-level briefings — data-driven, direct, and confident.\n\nYou will receive a daily player retention scan. Write a Telegram report \nfor the Head of Retention.\n\nData:\n- Date: {{$json.scan_date}}\n- High-risk players detected: {{$json.total_high_risk}}\n- Total LTV at risk: ${{$json.total_ltv_at_risk}}\n- Average churn score: {{$json.average_risk_score}}\n- Highest risk player: ID {{$json.highest_risk_player.player_ID}}, \n  score {{$json.highest_risk_player.churn_risk}}, \n  LTV ${{$json.highest_risk_player.lifetime_Value}}\n- Highest LTV player at risk: ID {{$json.highest_ltv_player.player_ID}}, \n  score {{$json.highest_ltv_player.churn_risk}}, \n  LTV ${{$json.highest_ltv_player.Lifetime_Value}}\n\nRules:\n- Output only the message text, nothing else\n- Use this exact structure, keep the line breaks:\n\n📊 Retention Report — [date]\n\n🚨 Players At Risk: [total]\n💰 Revenue Exposure: $[total LTV]\n📉 Avg Risk Score: [score]%\n\n⚠️ Priority Contact\nPlayer [ID] — [score]% disengagement risk\n\n💎 Highest Value Exposure  \nPlayer [ID] — $[LTV] lifetime value\n\n📋 Situation Summary\n[2 sentences maximum. State what happened today and why it matters financially. \nBe direct, no filler words.]\n\n👉 Recommended Action\n[1 sentence. Specific, actionable, tells exactly who should do what today.]\n\n- Convert churn score to percentage (multiply by 100), round to whole number\n- Write like a senior analyst briefing a director — precise, no corporate fluff\n- Never use \"churn\", \"flagged\", \"model\", \"AI\" or any technical terminology\n- The summary and action must sound like a human wrote them, not a template"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        0
+      ],
+      "id": "7c36d97d-5ece-40cc-b806-ef1bc89b2da4",
+      "name": "AI summary for SEO",
+      "credentials": {
+        "openAiApi": {
+          "id": "JPxum6AD70IJrt4j",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "af153244-d2cd-4a6c-a78d-1f68b90b83d8",
+              "name": "player_ID",
+              "value": "={{ $json.player_ID }}",
+              "type": "number"
+            },
+            {
+              "id": "38ac4e24-514e-4066-ad8a-3da6ec15fbf6",
+              "name": "churn_risk",
+              "value": "={{ $json.churn_risk }}",
+              "type": "number"
+            },
+            {
+              "id": "7fed1938-1d15-48bb-9ebc-77f23198d61b",
+              "name": "lifetime_Value",
+              "value": "={{ $json.lifetime_Value }}",
+              "type": "number"
+            },
+            {
+              "id": "9b009193-899a-4f91-b744-aa3248cba552",
+              "name": "risk_label",
+              "value": "={{ $json.risk_label }}",
+              "type": "string"
+            },
+            {
+              "id": "16ba9b7c-ea89-44ea-aada-e539cfec69ab",
+              "name": "threshold_used",
+              "value": "={{ $json.threshold_used }}",
+              "type": "number"
+            },
+            {
+              "id": "20c5314b-731f-4682-b4dc-df9c1db71043",
+              "name": "gmail",
+              "value": "={{ $('Casino DataSet').item.json.gmail }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "973f0093-82a0-453b-b78c-7989d4d17791",
+      "name": "Format change for google sheets"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "af153244-d2cd-4a6c-a78d-1f68b90b83d8",
+              "name": "player_ID",
+              "value": "={{ $json.player_ID }}",
+              "type": "number"
+            },
+            {
+              "id": "38ac4e24-514e-4066-ad8a-3da6ec15fbf6",
+              "name": "churn_risk",
+              "value": "={{ $json.churn_risk }}",
+              "type": "number"
+            },
+            {
+              "id": "7fed1938-1d15-48bb-9ebc-77f23198d61b",
+              "name": "lifetime_Value",
+              "value": "={{ $json.lifetime_Value }}",
+              "type": "number"
+            },
+            {
+              "id": "9b009193-899a-4f91-b744-aa3248cba552",
+              "name": "risk_label",
+              "value": "={{ $json.risk_label }}",
+              "type": "string"
+            },
+            {
+              "id": "16ba9b7c-ea89-44ea-aada-e539cfec69ab",
+              "name": "threshold_used",
+              "value": "={{ $json.threshold_used }}",
+              "type": "number"
+            },
+            {
+              "id": "20c5314b-731f-4682-b4dc-df9c1db71043",
+              "name": "gmail",
+              "value": "={{ $json.gmail }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        192
+      ],
+      "id": "a4fae73b-f339-4e1d-9989-e92fc0d1109b",
+      "name": "Format change for google sheets1"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a VIP retention manager at Baloo.bet online casino.\n\nA player has been flagged as at risk of leaving. Based on their data, \nchoose the most appropriate retention bonus and write a short personal \nmessage for their email.\n\nPlayer data:\n- Player ID: {{$json.player_ID}}\n- Lifetime Value: ${{$json.Lifetime_Value}}\n- Churn Risk Score: {{$json.churn_risk}}\n- Monthly Deposit: ${{$json.Average_Monthly_Deposit}}\n\nBonus selection rules:\n- Lifetime Value above $10,000 AND churn risk above 0.6 → 200 free spins + 50% deposit match\n- Lifetime Value above $5,000 AND churn risk above 0.5  → 100 free spins + 25% deposit match\n- Lifetime Value above $1,000                           → 50 free spins\n- Lifetime Value below $1,000 AND churn risk above 0.5  → 25 free spins + personal message\n- All other cases                                       → 25 free spins\n\nReturn ONLY a JSON object, nothing else, no backticks:\n\n{\n  \"bonus_offer\": \"the exact bonus chosen from the rules above\",\n  \"message\": \"2-3 sentence personal email body. Reference their loyalty naturally. Mention the specific bonus they are receiving. Warm tone, never corporate.\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        608,
+        -288
+      ],
+      "id": "6e3d3957-cd05-49c4-8375-c6abacf53751",
+      "name": "Personalized bonus",
+      "credentials": {
+        "openAiApi": {
+          "id": "JPxum6AD70IJrt4j",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output[0].content[0].text;\nconst cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();\nconst parsed = JSON.parse(cleaned);\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        -288
+      ],
+      "id": "1c501c6f-b759-4403-bfb2-2084165edfc6",
+      "name": "Parse the response"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Has a mail').item.json.gmail }}",
+        "subject": "We saved something for you 🎁",
+        "message": "=<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"/>\n  <title>A special offer for you</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#0d0d1a;font-family:Georgia,serif;\">\n\n  <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#0d0d1a;padding:40px 20px;\">\n    <tr>\n      <td align=\"center\">\n        <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;background-color:#1a1a2e;border-radius:16px;overflow:hidden;border:1px solid #2a2a4a;\">\n\n          <!-- HEADER -->\n          <tr>\n            <td style=\"background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:50px 40px 40px;text-align:center;border-bottom:2px solid #e94560;\">\n              <p style=\"margin:0 0 16px 0;font-size:28px;letter-spacing:8px;\">🎰</p>\n              <h1 style=\"margin:0;font-family:Georgia,serif;font-size:28px;font-weight:normal;color:#ffffff;letter-spacing:2px;\">We Miss You</h1>\n              <p style=\"margin:10px 0 0;font-size:13px;color:#8888aa;letter-spacing:4px;text-transform:uppercase;\">An exclusive offer awaits</p>\n            </td>\n          </tr>\n\n          <!-- PERSONAL MESSAGE -->\n          <tr>\n            <td style=\"padding:40px 40px 20px;\">\n              <p style=\"margin:0 0 16px;font-size:16px;line-height:1.8;color:#ccccdd;\">\n                {{ $json.message }}\n              </p>\n            </td>\n          </tr>\n\n          <!-- OFFER BLOCK -->\n          <tr>\n            <td style=\"padding:20px 40px;\">\n              <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:linear-gradient(135deg,#1e1e3a,#2a1a2e);border:1px solid #e94560;border-radius:12px;overflow:hidden;\">\n                <tr>\n                  <td style=\"padding:30px;text-align:center;\">\n                    <p style=\"margin:0 0 8px;font-size:13px;color:#e94560;letter-spacing:4px;text-transform:uppercase;\">Your exclusive offer</p>\n                    <p style=\"margin:0 0 20px;font-size:32px;font-weight:bold;color:#ffffff;line-height:1.3;\">{{ $json.bonus_offer }}</p>\n                    <p style=\"margin:0;font-size:13px;color:#8888aa;font-style:italic;\">⚡ This offer is available for a limited time only</p>\n                  </td>\n                </tr>\n              </table>\n            </td>\n          </tr>\n\n          <!-- CTA BUTTON -->\n          <tr>\n            <td style=\"padding:20px 40px 40px;text-align:center;\">\n              <a href=\"#\"\n                 style=\"display:inline-block;background-color:#e94560;color:#ffffff;text-decoration:none;font-family:Georgia,serif;font-size:16px;letter-spacing:2px;padding:18px 48px;border-radius:8px;text-transform:uppercase;\">\n                Claim My Offer\n              </a>\n              <p style=\"margin:20px 0 0;font-size:13px;color:#8888aa;line-height:1.6;\">\n                No deposit required. Log in and your spins will be waiting.\n              </p>\n            </td>\n          </tr>\n\n          <!-- DIVIDER -->\n          <tr>\n            <td style=\"padding:0 40px;\">\n              <hr style=\"border:none;border-top:1px solid #2a2a4a;margin:0;\" />\n            </td>\n          </tr>\n\n          <!-- FOOTER -->\n          <tr>\n            <td style=\"padding:30px 40px;text-align:center;\">\n              <p style=\"margin:0 0 8px;font-size:13px;color:#8888aa;line-height:1.6;\">\n                You're receiving this because you're a valued member of our casino.\n              </p>\n              <p style=\"margin:0;font-size:12px;color:#555566;\">\n                <a href=\"#\" style=\"color:#e94560;text-decoration:none;\">Unsubscribe</a>\n                &nbsp;·&nbsp;\n                <a href=\"#\" style=\"color:#e94560;text-decoration:none;\">Privacy Policy</a>\n                &nbsp;·&nbsp;\n                <a href=\"#\" style=\"color:#e94560;text-decoration:none;\">Terms &amp; Conditions</a>\n              </p>\n              <p style=\"margin:12px 0 0;font-size:11px;color:#444455;\">\n                Please gamble responsibly. 18+ only.\n              </p>\n            </td>\n          </tr>\n\n        </table>\n      </td>\n    </tr>\n  </table>\n\n</body>\n</html>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1104,
+        -288
+      ],
+      "id": "541e8570-ffa1-401c-853f-a659f079374f",
+      "name": "Send a personal bonus",
+      "webhookId": "91c488da-d7ef-4271-a9e7-92d0394f1061",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "a1ETpFJQQW03yhir",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Casino DataSet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Players Summary Counting": {
+      "main": [
+        [
+          {
+            "node": "AI summary for SEO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adding gmails": {
+      "main": [
+        [
+          {
+            "node": "HIGH/LOW risks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HIGH/LOW risks": {
+      "main": [
+        [
+          {
+            "node": "Format change for google sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has a mail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format change for google sheets1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has a mail": {
+      "main": [
+        [
+          {
+            "node": "Personalized bonus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Casino DataSet": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request to ML | Calculating risks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adding rows to Churns": {
+      "main": [
+        [
+          {
+            "node": "Players Summary Counting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adding rows to Loyalists": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request to ML | Calculating risks": {
+      "main": [
+        [
+          {
+            "node": "Adding gmails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI summary for SEO": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format change for google sheets": {
+      "main": [
+        [
+          {
+            "node": "Adding rows to Churns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format change for google sheets1": {
+      "main": [
+        [
+          {
+            "node": "Adding rows to Loyalists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Personalized bonus": {
+      "main": [
+        [
+          {
+            "node": "Parse the response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse the response": {
+      "main": [
+        [
+          {
+            "node": "Send a personal bonus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a personal bonus": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "3863124c-ded0-4670-b3f7-10bf3b8f3261",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5ab3b6cabe868f7ab2cc64623bee0dd51ba16d6f8805dcee30d28f2c85b305b9"
+  },
+  "id": "KIjyGZ54ekc5cNd0",
+  "tags": [
+    {
+      "updatedAt": "2026-05-24T20:20:23.208Z",
+      "createdAt": "2026-05-24T20:20:23.208Z",
+      "id": "TvpKpQPv4oYPHiQm",
+      "name": "casino"
+    }
+  ]
+}
